@@ -49,9 +49,11 @@ app.all("/route", (req, res) => {
 
   // הודעת סיום שיחה מימות - אין צורך להחזיר הנחיית ניתוב, רק לאשר קבלה.
   if (data.hangup === "yes") {
-    console.log("Hangup notification:", data);
+    console.log("HANGUP:", req.originalUrl, JSON.stringify(data));
     return res.send("");
   }
+
+  console.log("ROUTE REQUEST:", req.originalUrl, JSON.stringify(data));
 
   // בדיקת תקינות בסיסית
   if (!tel) {
@@ -78,6 +80,7 @@ app.all("/route", (req, res) => {
     `id_list_message=m-1990` +
     `&go_to_folder=${tel}*${presentedId}`;
 
+  console.log("RESPONSE:", responseLine);
   res.send(responseLine);
 });
 
