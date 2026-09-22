@@ -1,0 +1,11 @@
+{
+  "name": "yemot-route",
+  "version": "1.0.0",
+  "main": "yemot-route.js",
+  "scripts": {
+    "start": "node yemot-route.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
