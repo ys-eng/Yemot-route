@@ -1,3 +1,4 @@
+// yemot-route.js
 // שירות גנרי אחד שמשרת כל שלוחות ה-API של ימות המשיח.
 // כל שלוחה מצביעה (api_link) לאותו שירות, ומגדירה בתוכה (בגוף הגדרות השלוחה)
 // את הפרמטרים tel / Introduction / ending / token כשורות נפרדות.
@@ -23,13 +24,8 @@ const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-// נתיב ראשי לבדיקת תקינות השירות (Health Check עבור Render והדפדפן)
-app.get("/", (req, res) => {
-  res.send("Yemot route service is active and running!");
-});
-
-// שמות אפשריים לשדה "מספר הטלפון של המתקשר" שימות עשוי לשלוח
-const CALLER_PHONE_FIELDS = ["ApiPhone", "Phone", "phone", "ApiCallId", "callerId"];
+// מאומת מול לוג בקשה אמיתי: ApiPhone הוא השדה של מספר המתקשר.
+const CALLER_PHONE_FIELDS = ["ApiPhone", "Phone", "phone"];
 
 function pick(obj, keys) {
   for (const k of keys) {
@@ -45,23 +41,39 @@ app.all("/route", (req, res) => {
   const introduction = pick(data, ["Introduction", "introduction"]) || "";
   const ending = pick(data, ["ending", "Ending"]) || "";
   const token = pick(data, ["token", "Token"]);
-  const expectedToken = process.env.YEMOT_TOKEN; // אופציונלי
+  const expectedToken = process.env.YEMOT_TOKEN; // אופציונלי - להגדיר בשירות אם רוצים לאמת
 
   const callerPhone = pick(data, CALLER_PHONE_FIELDS) || "";
 
   res.type("text/plain; charset=utf-8");
 
+  // הודעת סיום שיחה מימות - אין צורך להחזיר הנחיית ניתוב, רק לאשר קבלה.
+  if (data.hangup === "yes") {
+    console.log("Hangup notification:", data);
+    return res.send("");
+  }
+
   // בדיקת תקינות בסיסית
   if (!tel) {
+    // אין הגדרת יעד לשלוחה הזו - אפשר להחזיר הודעת שגיאה קולית ולנתק
     return res.send("id_list_message=t-לא הוגדר יעד לשלוחה זו&go_to_folder=hangup");
   }
   if (expectedToken && token !== expectedToken) {
     return res.send("id_list_message=t-קוד גישה שגוי&go_to_folder=hangup");
   }
 
-  // בניית מספר הזיהוי שיוצג
+  // בניית מספר הזיהוי (Caller ID) שיוצג אצל מקבל השיחה:
+  // קידומת (Introduction) + מספר המתקשר עצמו + סיומת (ending) - כל חלק אופציונלי.
   const presentedId = `${introduction}${callerPhone}${ending}`;
 
+  // TODO - לאמת מול ימות את התחביר המדויק:
+  // 1) השמעת הודעת מערכת M1990 בזמן ההמתנה למענה (לפי תיעוד מודול ה-API,
+  //    system_message מקבל את מספר ההודעה עם או בלי האות M בהתחלה).
+  // 2) ניתוב השיחה בפועל למספר tel, עם הצגת presentedId כמספר המזוהה.
+  //    ב-type=routing הצגת המספר היוצא נעשית עם routing_your_id=..., אבל כאן
+  //    התשובה חוזרת משלוחת api, ולכן יש לבדוק אם יש תמיכה ישירה בהחזרת
+  //    "יעד*מספר_מזוהה" או שיש לנתב קודם ל-go_to_folder של שלוחת routing קיימת
+  //    שמזהה את הפרמטרים דרך שאילתה נוספת (query string) על גבי go_to_folder.
   const responseLine =
     `id_list_message=m-1990` +
     `&go_to_folder=${tel}*${presentedId}`;
@@ -70,4 +82,4 @@ app.all("/route", (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Yemot route service listening on port ${PORT}`));
+app.listen(PORT, () => console.log(`Yemot route service listening on ${PORT}`));
