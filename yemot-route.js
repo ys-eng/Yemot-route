@@ -1,22 +1,19 @@
 // yemot-route.js
 // שירות גנרי אחד שמשרת כל שלוחות ה-API של ימות המשיח.
-// כל שלוחה מצביעה (api_link) לאותו שירות, ומגדירה בתוכה (בגוף הגדרות השלוחה)
-// את הפרמטרים tel / Introduction / ending / token כשורות נפרדות.
 //
-// דוגמה להגדרת שלוחה בימות:
+// חשוב: גילינו בבדיקות שאסור לסמוך על "&" בתוך api_link - כשמדביקים אותו
+// בהגדרות השלוחה ה-"&" עלול להיבלע, ובנוסף ימות עצמו מוסיף את הפרמטרים שלו
+// עם "?" נוסף במקום "&" (באג ידוע). לכן: כל ההגדרות שלנו נדחסות לפרמטר יחיד
+// "cfg", בלי & בפנים, מופרד בפסיקים: tel,Introduction,ending
+//
+// הגדרת השלוחה בימות (שורה אחת ל-api_link, בלי מעברי שורה בתוכה):
 //   type=api
-//   api_link=https://YOUR-SERVICE.onrender.com/route
+//   api_link=https://YOUR-SERVICE.onrender.com/route?cfg=0501234567,072,99
 //   api_url_post=yes
-//   tel=0501234567
-//   Introduction=072
-//   ending=99
-//   token=SOME_SECRET
 //
-// !! חשוב: את שם השדה שבו ימות שולח את מספר המתקשר (למשל ApiPhone / Phone / phone)
-// יש לוודא מול לוג הבקשות בפועל (LogApi.ymgr באזור הניהול), כי זה משתנה בין גרסאות/מודולים.
-// כמו כן, את התחביר המדויק של השורה המוחזרת לניתוב שיחה למספר חיצוני עם הצגת מספר
-// מותאם אישית, ואת התחביר המדויק להשמעת הודעת מערכת (M1990) תוך כדי ההמתנה,
-// יש לאמת/לכייל מול התיעוד הרשמי או מול תמיכת ימות - ראה הערות "TODO" למטה.
+// אם Introduction או ending לא נחוצים - משאירים את המקום ריק בין הפסיקים:
+//   ...?cfg=0501234567,,99      (בלי Introduction)
+//   ...?cfg=0501234567,072,     (בלי ending)
 
 const express = require("express");
 const app = express();
@@ -27,6 +24,27 @@ app.use(express.json());
 // מאומת מול לוג בקשה אמיתי: ApiPhone הוא השדה של מספר המתקשר.
 const CALLER_PHONE_FIELDS = ["ApiPhone", "Phone", "phone"];
 
+// פענוח ידני של ה-query, סובלני ל"?" כפול שימות מוסיף בסוף הכתובת.
+function parseRawQuery(originalUrl) {
+  const qIndex = originalUrl.indexOf("?");
+  if (qIndex === -1) return {};
+  let raw = originalUrl.slice(qIndex + 1);
+  raw = raw.split("?").join("&"); // "?" נוסף → מתייחסים אליו כ-"&"
+  const result = {};
+  for (const pair of raw.split("&")) {
+    if (!pair) continue;
+    const eq = pair.indexOf("=");
+    const key = eq === -1 ? pair : pair.slice(0, eq);
+    const val = eq === -1 ? "" : pair.slice(eq + 1);
+    try {
+      result[decodeURIComponent(key)] = decodeURIComponent(val.replace(/\+/g, " "));
+    } catch (e) {
+      result[key] = val;
+    }
+  }
+  return result;
+}
+
 function pick(obj, keys) {
   for (const k of keys) {
     if (obj[k] !== undefined && obj[k] !== "") return String(obj[k]);
@@ -35,15 +53,7 @@ function pick(obj, keys) {
 }
 
 app.all("/route", (req, res) => {
-  const data = { ...req.query, ...req.body };
-
-  const tel = pick(data, ["tel", "Tel", "TEL"]);
-  const introduction = pick(data, ["Introduction", "introduction"]) || "";
-  const ending = pick(data, ["ending", "Ending"]) || "";
-  const token = pick(data, ["token", "Token"]);
-  const expectedToken = process.env.YEMOT_TOKEN; // אופציונלי - להגדיר בשירות אם רוצים לאמת
-
-  const callerPhone = pick(data, CALLER_PHONE_FIELDS) || "";
+  const data = { ...parseRawQuery(req.originalUrl), ...req.body };
 
   res.type("text/plain; charset=utf-8");
 
@@ -55,27 +65,27 @@ app.all("/route", (req, res) => {
 
   console.log("ROUTE REQUEST:", req.originalUrl, JSON.stringify(data));
 
-  // בדיקת תקינות בסיסית
+  // cfg=tel,Introduction,ending
+  const cfg = data.cfg || "";
+  const [tel, introduction = "", ending = ""] = cfg.split(",");
+
+  const token = pick(data, ["token", "Token"]);
+  const expectedToken = process.env.YEMOT_TOKEN; // אופציונלי
+
+  const callerPhone = pick(data, CALLER_PHONE_FIELDS) || "";
+
   if (!tel) {
-    // אין הגדרת יעד לשלוחה הזו - אפשר להחזיר הודעת שגיאה קולית ולנתק
     return res.send("id_list_message=t-לא הוגדר יעד לשלוחה זו&go_to_folder=hangup");
   }
   if (expectedToken && token !== expectedToken) {
     return res.send("id_list_message=t-קוד גישה שגוי&go_to_folder=hangup");
   }
 
-  // בניית מספר הזיהוי (Caller ID) שיוצג אצל מקבל השיחה:
-  // קידומת (Introduction) + מספר המתקשר עצמו + סיומת (ending) - כל חלק אופציונלי.
+  // המספר המזוהה שיוצג אצל מקבל השיחה: קידומת + מספר המתקשר + סיומת.
   const presentedId = `${introduction}${callerPhone}${ending}`;
 
-  // TODO - לאמת מול ימות את התחביר המדויק:
-  // 1) השמעת הודעת מערכת M1990 בזמן ההמתנה למענה (לפי תיעוד מודול ה-API,
-  //    system_message מקבל את מספר ההודעה עם או בלי האות M בהתחלה).
-  // 2) ניתוב השיחה בפועל למספר tel, עם הצגת presentedId כמספר המזוהה.
-  //    ב-type=routing הצגת המספר היוצא נעשית עם routing_your_id=..., אבל כאן
-  //    התשובה חוזרת משלוחת api, ולכן יש לבדוק אם יש תמיכה ישירה בהחזרת
-  //    "יעד*מספר_מזוהה" או שיש לנתב קודם ל-go_to_folder של שלוחת routing קיימת
-  //    שמזהה את הפרמטרים דרך שאילתה נוספת (query string) על גבי go_to_folder.
+  // TODO - לאמת מול ימות/תמיכה את התחביר המדויק להשמעת M1990 ולניתוב
+  // עם מספר מזוהה מותאם אישית - זו עדיין השערת עבודה שדורשת אימות בשטח.
   const responseLine =
     `id_list_message=m-1990` +
     `&go_to_folder=${tel}*${presentedId}`;
