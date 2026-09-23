@@ -84,12 +84,18 @@ app.all("/route", (req, res) => {
   // המספר המזוהה שיוצג אצל מקבל השיחה: קידומת + מספר המתקשר + סיומת.
   const presentedId = `${introduction}${callerPhone}${ending}`;
 
-  // שלב בדיקה: חוזרים למינימום שידוע שעובד בפרויקט המקורי - מספר טלפון גולמי
-  // בתגובה, בלי id_list_message/go_to_folder (שהתברר שאינו מיועד לחיוג חיצוני).
-  // אחרי שזה יאומת כעובד - נוסיף בהדרגה את M1990 ואת המספר המזוהה המותאם.
-  const responseLine = tel;
+  // מאומת מהתיעוד הרשמי: routing=<number> מחייג למספר חוץ (בעלות יחידות),
+  // ומאומת מפורום המפתחים של ימות: הגדרות "רגילות" של מודול ה-routing
+  // (routing_your_id, music_on_hold, ...) עובדות גם כששולחים אותן משלוחת
+  // api, גם שזה לא מתועד רשמית עבור api. משרשרים הכל יחד עם &.
+  // עדיין דורש אימות בפועל: האם ניתן להציג מזוהה "סינתטי" (קידומת+מספר+סיומת)
+  // שאינו מספר בבעלות החשבון בימות, או שרק מספרים מאומתים מתקבלים.
+  const responseLine =
+    `routing=${tel}` +
+    `&routing_your_id=${presentedId}` +
+    `&music_on_hold=m-1990`;
 
-  console.log("RESPONSE:", responseLine, "(presentedId would be:", presentedId, ")");
+  console.log("RESPONSE:", responseLine);
   res.send(responseLine);
 });
 
