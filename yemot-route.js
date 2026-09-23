@@ -84,13 +84,12 @@ app.all("/route", (req, res) => {
   // המספר המזוהה שיוצג אצל מקבל השיחה: קידומת + מספר המתקשר + סיומת.
   const presentedId = `${introduction}${callerPhone}${ending}`;
 
-  // TODO - לאמת מול ימות/תמיכה את התחביר המדויק להשמעת M1990 ולניתוב
-  // עם מספר מזוהה מותאם אישית - זו עדיין השערת עבודה שדורשת אימות בשטח.
-  const responseLine =
-    `id_list_message=m-1990` +
-    `&go_to_folder=${tel}*${presentedId}`;
+  // שלב בדיקה: חוזרים למינימום שידוע שעובד בפרויקט המקורי - מספר טלפון גולמי
+  // בתגובה, בלי id_list_message/go_to_folder (שהתברר שאינו מיועד לחיוג חיצוני).
+  // אחרי שזה יאומת כעובד - נוסיף בהדרגה את M1990 ואת המספר המזוהה המותאם.
+  const responseLine = tel;
 
-  console.log("RESPONSE:", responseLine);
+  console.log("RESPONSE:", responseLine, "(presentedId would be:", presentedId, ")");
   res.send(responseLine);
 });
 
