@@ -101,4 +101,41 @@ app.all("/route", (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+
+// ניתוב חינמי (בלי עלות יחידות) למערכת ימות המשיח אחרת, עם קידומת/סיומת.
+// הגדרת השלוחה: cfg=מספר_מערכת_יעד.Introduction.ending (אותו פורמט, נקודות)
+app.all("/route-yemot", (req, res) => {
+  const data = { ...parseRawQuery(req.originalUrl), ...req.body };
+
+  res.type("text/plain; charset=utf-8");
+
+  if (data.hangup === "yes") {
+    console.log("HANGUP (yemot):", req.originalUrl, JSON.stringify(data));
+    return res.send("");
+  }
+
+  console.log("ROUTE-YEMOT REQUEST:", req.originalUrl, JSON.stringify(data));
+
+  const cfg = data.cfg || "";
+  const [targetSystem, introduction = "", ending = ""] = cfg.split(".");
+
+  const callerPhone = pick(data, CALLER_PHONE_FIELDS) || "";
+
+  if (!targetSystem) {
+    return res.send("id_list_message=t-לא הוגדר יעד לשלוחה זו&go_to_folder=hangup");
+  }
+
+  const presentedId = `${introduction}${callerPhone}${ending}`;
+
+  // TODO - עדיין לא מאומת בפועל: שילוב routing_your_id עם routing_yemot
+  // (בניגוד ל-routing= שכבר נבדק ואומת). לבדוק קודם בשיחת בדיקה קצרה.
+  const responseLine =
+    `routing_yemot=${targetSystem}` +
+    `&routing_your_id=${presentedId}` +
+    `&music_on_hold=m-1990`;
+
+  console.log("RESPONSE (yemot):", responseLine);
+  res.send(responseLine);
+});
+
 app.listen(PORT, () => console.log(`Yemot route service listening on ${PORT}`));
