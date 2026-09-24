@@ -65,9 +65,10 @@ app.all("/route", (req, res) => {
 
   console.log("ROUTE REQUEST:", req.originalUrl, JSON.stringify(data));
 
-  // cfg=tel,Introduction,ending
+  // cfg=tel.Introduction.ending (נקודה כמפריד - התו שימות עצמו משתמש בו
+  // רשמית להפרדת כמה ערכים, למשל ברשימות routing_to_phone)
   const cfg = data.cfg || "";
-  const [tel, introduction = "", ending = ""] = cfg.split(",");
+  const [tel, introduction = "", ending = ""] = cfg.split(".");
 
   const token = pick(data, ["token", "Token"]);
   const expectedToken = process.env.YEMOT_TOKEN; // אופציונלי
